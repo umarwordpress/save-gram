@@ -60,7 +60,7 @@ export async function POST(request: Request) {
         // The CDN URL stays on the server. The client only ever sees a token.
         assets: media.assets.map((asset) => {
           const filename = buildFilename(
-            [platform, media.metadata.authorHandle ?? media.metadata.author, media.metadata.title],
+            [platform, media.metadata.author ?? media.metadata.authorHandle, media.metadata.title],
             asset.extension,
           );
           return {
@@ -73,7 +73,15 @@ export async function POST(request: Request) {
             sizeBytes: asset.sizeBytes ?? null,
             filename,
             downloadUrl: `/api/download?token=${encodeURIComponent(
-              createDownloadToken({ url: asset.url, platform, filename, mimeType: asset.mimeType }),
+              createDownloadToken({
+                url: asset.url,
+                platform,
+                filename,
+                mimeType: asset.mimeType,
+                streamVia: asset.streamVia,
+                sourceUrl: asset.sourceUrl,
+                formatId: asset.formatId,
+              }),
             )}`,
           };
         }),

@@ -48,6 +48,9 @@ export async function GET(request: Request) {
         extension: payload.filename.split(".").pop() || "mp4",
         mimeType: payload.mimeType,
         preference: 0,
+        streamVia: payload.streamVia ?? "direct",
+        sourceUrl: payload.sourceUrl ?? payload.url,
+        formatId: payload.formatId,
       },
       { signal: request.signal },
     );

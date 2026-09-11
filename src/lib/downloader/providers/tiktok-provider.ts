@@ -1,6 +1,6 @@
 import { hostMatches, normalizeUrl } from "@/lib/url/normalize";
 import type { ResolverMedia } from "../resolver";
-import type { ProviderContext } from "../types";
+import type { ProviderContext, StreamStrategy } from "../types";
 import { BaseProvider } from "./base-provider";
 
 const SHORT_HOSTS = ["vm.tiktok.com", "vt.tiktok.com"];
@@ -12,6 +12,16 @@ export class TikTokProvider extends BaseProvider {
 
   protected refererUrl(): string {
     return "https://www.tiktok.com/";
+  }
+
+  /**
+   * TikTok ties its media links to the challenge cookie held by the session
+   * that extracted them. A fresh request from this server gets a 403 whatever
+   * headers it sends, verified against the live CDN, so the resolver streams
+   * the file instead of handing over a URL.
+   */
+  protected streamStrategy(): StreamStrategy {
+    return "upstream";
   }
 
   /** vm/vt short links and /t/ redirects are expanded before resolving. */

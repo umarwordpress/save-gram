@@ -1,6 +1,7 @@
 import { getToolByPlatform, getToolBySlug, isToolEnabled } from "@/lib/tools/registry";
 import { detectTool } from "@/lib/url/validate";
 import { DownloaderError } from "./errors";
+import { installDefaultResolver } from "./resolvers";
 import { InstagramProvider } from "./providers/instagram-provider";
 import { TikTokProvider } from "./providers/tiktok-provider";
 import { FacebookProvider } from "./providers/facebook-provider";
@@ -90,6 +91,9 @@ export class DownloaderService {
     return provider;
   }
 }
+
+// Chooses yt-dlp or an HTTP endpoint from the environment, once per process.
+installDefaultResolver();
 
 /**
  * The application's service instance.

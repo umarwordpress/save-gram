@@ -10,11 +10,17 @@ import { DownloaderError } from "./errors";
  * the link stop working on its own.
  */
 export interface DownloadTokenPayload {
-  /** Media URL on the platform CDN. */
+  /** Media URL on the platform CDN. Empty for upstream streamed assets. */
   url: string;
   platform: string;
   filename: string;
   mimeType: string;
+  /** How the server should fetch the bytes. */
+  streamVia: import("./types").StreamStrategy;
+  /** Post URL, needed to re-extract when streaming upstream. */
+  sourceUrl: string;
+  /** Rendition the user picked. */
+  formatId?: string;
   /** Expiry as a unix timestamp in seconds. */
   exp: number;
 }
@@ -75,7 +81,8 @@ export function verifyDownloadToken(token: string): DownloadTokenPayload {
     throw new DownloaderError("link_expired", undefined, "Download token payload was not JSON");
   }
 
-  if (!payload.url || !payload.platform || typeof payload.exp !== "number") {
+  const hasTarget = payload.streamVia === "upstream" ? !!payload.sourceUrl : !!payload.url;
+  if (!hasTarget || !payload.platform || typeof payload.exp !== "number") {
     throw new DownloaderError("link_expired", undefined, "Download token was missing fields");
   }
 

@@ -23,12 +23,21 @@ export class FacebookProvider extends BaseProvider {
     return normalizeUrl(expanded, ["v"])?.href ?? url;
   }
 
+  protected preferenceFor(media: ResolverMedia): number {
+    // Without dimensions the base score cannot separate the renditions.
+    const note = (media.formatNote ?? "").toLowerCase();
+    return super.preferenceFor(media) + (note.includes("hd") ? 500 : 0);
+  }
+
   protected labelFor(media: ResolverMedia, index: number): string {
     if (media.label) return media.label;
     if (media.kind === "image") return `Image ${index + 1}`;
-    // Facebook publishes renditions rather than one file, so name them the way
-    // Facebook does instead of by pixel height alone.
-    if (media.height && media.height >= 720) return `HD ${media.height}p`;
-    return media.height ? `SD ${media.height}p` : "SD video";
+    // Facebook publishes named renditions and often reports no dimensions at
+    // all, so its own hd and sd tags are the reliable signal.
+    const note = (media.formatNote ?? "").toLowerCase();
+    if (note.includes("hd")) return media.height ? `HD ${media.height}p` : "HD video";
+    if (note.includes("sd")) return media.height ? `SD ${media.height}p` : "SD video";
+    if (media.height) return media.height >= 720 ? `HD ${media.height}p` : `SD ${media.height}p`;
+    return "MP4 video";
   }
 }

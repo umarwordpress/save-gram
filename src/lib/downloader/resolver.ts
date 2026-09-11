@@ -14,6 +14,27 @@ import type { MediaAsset, ResolvedMedia } from "./types";
 export interface MediaResolver {
   readonly id: string;
   resolve(input: ResolverInput): Promise<ResolverResult>;
+  /**
+   * Stream the media itself, for assets marked `streamVia: "upstream"`.
+   * Only resolvers that can do this implement it; the rest leave it out and
+   * their assets are fetched directly.
+   */
+  openStream?(input: StreamInput): Promise<UpstreamStream>;
+}
+
+export interface StreamInput {
+  platform: string;
+  /** Post URL, not the CDN URL. */
+  url: string;
+  /** Rendition to select, as reported by the resolver. */
+  formatId?: string;
+  signal?: AbortSignal;
+}
+
+export interface UpstreamStream {
+  body: ReadableStream<Uint8Array>;
+  contentType?: string;
+  contentLength?: number;
 }
 
 export interface ResolverInput {
@@ -47,6 +68,14 @@ export interface ResolverMedia {
   durationSeconds?: number;
   /** Set by TikTok style sources that publish a clean master. */
   watermarkFree?: boolean;
+  /** Resolver specific id used to re-select this exact rendition later. */
+  formatId?: string;
+  /** Quality hint from the platform, for sources that report no dimensions. */
+  formatNote?: string;
+  /** Headers the CDN expects for this URL. */
+  httpHeaders?: Record<string, string>;
+  /** Overrides the provider default when this asset cannot be fetched directly. */
+  streamVia?: import("./types").StreamStrategy;
 }
 
 const DEFAULT_TIMEOUT_MS = 15_000;

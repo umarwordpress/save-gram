@@ -6,6 +6,7 @@ import { DownloaderError, toDownloaderError } from "../errors";
 import { assertSafeMediaResponse, assertSafeMediaUrl, buildFilename } from "../media-validation";
 import { getDefaultResolver, type MediaResolver, type ResolverMedia, type ResolverResult } from "../resolver";
 import type {
+  StreamStrategy,
   DownloadStream,
   DownloaderProvider,
   MediaAsset,
@@ -90,7 +91,7 @@ export abstract class BaseProvider implements DownloaderProvider {
     }
 
     const assets = result.media
-      .map((item, index) => this.toAsset(item, index))
+      .map((item, index) => this.toAsset(item, index, target))
       .filter((asset): asset is MediaAsset => asset !== null)
       .sort((a, b) => b.preference - a.preference);
 
@@ -118,12 +119,56 @@ export abstract class BaseProvider implements DownloaderProvider {
   }
 
   async download(asset: MediaAsset, ctx?: ProviderContext): Promise<DownloadStream> {
+    if (asset.streamVia === "upstream") return this.downloadViaResolver(asset, ctx);
+    return this.downloadDirect(asset, ctx);
+  }
+
+  /** The resolver streams the file, for CDNs that refuse a handoff. */
+  private async downloadViaResolver(asset: MediaAsset, ctx?: ProviderContext): Promise<DownloadStream> {
+    // This path hands a URL to the resolver, and yt-dlp accepts a thousand
+    // sites. Re-check the post URL against this tool's own rules so a forged
+    // token cannot turn the download route into a general purpose fetcher.
+    const validation = this.validate(asset.sourceUrl);
+    if (!validation.ok) {
+      throw new DownloaderError(
+        "media_rejected",
+        undefined,
+        `Upstream stream refused for ${asset.sourceUrl}: ${validation.code}`,
+      );
+    }
+
+    const resolver = this.resolver;
+    if (!resolver.openStream) {
+      throw new DownloaderError(
+        "upstream_error",
+        undefined,
+        `Resolver ${resolver.id} cannot stream, but the asset requires it`,
+      );
+    }
+
+    const stream = await resolver.openStream({
+      platform: this.platform,
+      url: asset.sourceUrl,
+      formatId: asset.formatId,
+      signal: ctx?.signal,
+    });
+
+    return {
+      body: stream.body,
+      contentType: stream.contentType || asset.mimeType,
+      contentLength: stream.contentLength,
+      filename: asset.id,
+    };
+  }
+
+  /** This server fetches the CDN URL itself. */
+  private async downloadDirect(asset: MediaAsset, ctx?: ProviderContext): Promise<DownloadStream> {
     const safeUrl = assertSafeMediaUrl(asset.url, this.platform);
 
     let response: Response;
     try {
       response = await fetch(safeUrl, {
-        headers: this.mediaRequestHeaders(),
+        headers: { ...this.mediaRequestHeaders(), ...(asset.httpHeaders ?? {}) },
         signal: ctx?.signal,
         cache: "no-store",
         redirect: "follow",
@@ -153,6 +198,14 @@ export abstract class BaseProvider implements DownloaderProvider {
    */
   protected async prepareUrl(url: string, _ctx?: ProviderContext): Promise<string> {
     return url;
+  }
+
+  /**
+   * Default strategy for this platform's assets. Override to "upstream" where
+   * the CDN will not serve a link that another client extracted.
+   */
+  protected streamStrategy(): StreamStrategy {
+    return "direct";
   }
 
   /** Headers sent when fetching the media file itself. */
@@ -194,12 +247,18 @@ export abstract class BaseProvider implements DownloaderProvider {
     return "mp4";
   }
 
-  private toAsset(media: ResolverMedia, index: number): MediaAsset | null {
-    try {
-      // Reject unsafe URLs at resolve time so they never reach the client.
-      assertSafeMediaUrl(media.url, this.platform);
-    } catch {
-      return null;
+  private toAsset(media: ResolverMedia, index: number, sourceUrl: string): MediaAsset | null {
+    const streamVia = media.streamVia ?? this.streamStrategy();
+
+    // A direct asset is fetched from its CDN URL by this server, so the URL has
+    // to clear the allowlist now. An upstream asset is streamed by the resolver
+    // and its CDN URL is never fetched here, so that check does not apply.
+    if (streamVia === "direct") {
+      try {
+        assertSafeMediaUrl(media.url, this.platform);
+      } catch {
+        return null;
+      }
     }
 
     const extension = this.defaultExtension(media);
@@ -215,6 +274,10 @@ export abstract class BaseProvider implements DownloaderProvider {
       durationSeconds: media.durationSeconds,
       sizeBytes: media.sizeBytes,
       preference: this.preferenceFor(media),
+      streamVia,
+      sourceUrl,
+      formatId: media.formatId,
+      httpHeaders: media.httpHeaders,
     };
   }
 

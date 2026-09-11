@@ -81,33 +81,71 @@ service, and the service consults the registry.
 Reading media out of a social platform is the one part that architecture cannot
 make stable, because none of these platforms publish a download API. That work
 sits behind the `MediaResolver` interface in `src/lib/downloader/resolver.ts`.
+Two implementations ship.
 
-The shipped implementation, `HttpMediaResolver`, POSTs `{ platform, url }` to the
-endpoint in `SAVEGRAM_RESOLVER_ENDPOINT` and expects a `ResolverResult` back:
+**yt-dlp (default).** `YtDlpResolver` runs the `yt-dlp` binary as a subprocess.
+yt-dlp is actively maintained and tracks these platforms as they change, which
+is why it is the default. It needs a real Node server with the binary on PATH
+and **will not work on a serverless platform** such as Vercel functions. Use a
+VPS, a container, Render, Railway or Fly.
+
+```bash
+brew install yt-dlp      # macOS
+pipx install yt-dlp      # Linux
+```
+
+**HTTP.** `HttpMediaResolver` POSTs `{ platform, url }` to
+`SAVEGRAM_RESOLVER_ENDPOINT` and expects a `ResolverResult` back:
 
 ```json
 {
   "title": "Sunset timelapse",
   "author": "Test Creator",
-  "authorHandle": "@testcreator",
   "thumbnailUrl": "https://scontent.cdninstagram.com/v/thumb.jpg",
   "durationSeconds": 21,
   "media": [
-    {
-      "kind": "video",
-      "url": "https://scontent.cdninstagram.com/v/reel.mp4",
-      "height": 1080,
-      "sizeBytes": 4200000,
-      "watermarkFree": false
-    }
+    { "kind": "video", "url": "https://...mp4", "height": 1080, "sizeBytes": 4200000 }
   ]
 }
 ```
 
-Responses are validated before use, and any media URL outside the platform's CDN
-allowlist is dropped. To use a different backend, implement `MediaResolver` and
-pass it to `setDefaultResolver()`, or inject it into a single provider's
-constructor.
+Select one with `SAVEGRAM_RESOLVER`, or implement `MediaResolver` yourself and
+pass it to `setDefaultResolver()`.
+
+### Platform status
+
+Verified against live public posts:
+
+| Platform | Works without login | Notes |
+| --- | --- | --- |
+| TikTok | yes | Streamed through yt-dlp, see below |
+| Facebook | yes | HD and SD renditions both offered |
+| Instagram | **no** | Requires a cookie file, see below |
+
+**Instagram needs a signed in session.** It answers anonymous requests for reel
+media with an empty response, so the tool returns a clear error until
+`SAVEGRAM_YTDLP_COOKIES_INSTAGRAM` points at a Netscape format cookie file.
+Exporting session cookies puts that account at risk of being rate limited or
+disabled, so use a throwaway account rather than a personal one, and never
+commit the file.
+
+**Only complete files are offered.** Some renditions are published as video
+without an audio track and would need muxing with ffmpeg. Those are filtered
+out rather than served as silent video, which is why a 1080p option is sometimes
+absent when only a 720p one is listed.
+
+### Two download strategies
+
+`MediaAsset.streamVia` decides how the bytes are fetched:
+
+- `direct` fetches the CDN URL from this server. Used for Facebook.
+- `upstream` has the resolver stream the file. Required for TikTok, whose CDN
+  ties media links to the challenge cookie held by the session that extracted
+  them. A fresh request from this server gets a 403 whatever headers it sends,
+  which was verified against the live CDN.
+
+A provider picks its default by overriding `streamStrategy()`. Neither path
+buffers the file in memory or writes it to disk.
 
 ## Security notes
 
@@ -115,12 +153,19 @@ Resolver responses are untrusted input, since they decide what URLs this server
 will fetch. Two independent checks apply:
 
 - At resolve time, any asset whose host is not on the platform's CDN allowlist is
-  dropped before it can reach the client.
+  dropped before it can reach the client. This applies to `direct` assets, whose
+  URLs this server fetches; `upstream` assets are streamed by the resolver and
+  their CDN URLs are never fetched here.
 - At download time, the same check runs again on the URL inside the signed token,
   so a valid signature alone is not enough to make the server fetch something.
 
 Both reject non https URLs, private and link local addresses, and hosts that only
 look like a CDN by suffix, such as `cdninstagram.com.attacker.example`.
+
+yt-dlp is invoked with `spawn` and an argument array, never through a shell, and
+the post URL is passed after `--` as its own element. A crafted URL cannot become
+another argument or a command, and it has already passed the tool's own host and
+path validation before it gets that far.
 
 `SAVEGRAM_TOKEN_SECRET` must be set in production. The app refuses to issue
 download tokens without it rather than falling back to a known development value.

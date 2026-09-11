@@ -1,5 +1,17 @@
 export type MediaKind = "video" | "image" | "audio";
 
+/**
+ * How the server gets the bytes for an asset.
+ *
+ * - `direct` fetches the CDN URL. Cheapest, and works where the CDN serves the
+ *   link to anyone, as Facebook does.
+ * - `upstream` asks the provider's resolver to stream the media itself. Needed
+ *   where the CDN refuses a handoff, as TikTok does: its links are tied to the
+ *   challenge cookie from the session that extracted them, so a fresh request
+ *   from this server gets a 403 no matter which headers it sends.
+ */
+export type StreamStrategy = "direct" | "upstream";
+
 export interface MediaAsset {
   /** Stable id within one resolve result, used to request the download. */
   id: string;
@@ -17,6 +29,14 @@ export interface MediaAsset {
   sizeBytes?: number;
   /** Higher wins when picking a default. */
   preference: number;
+  /** How download() should fetch this asset. */
+  streamVia: StreamStrategy;
+  /** Post URL this asset came from. Required for upstream streaming. */
+  sourceUrl: string;
+  /** Resolver specific format id, so the chosen quality survives to download. */
+  formatId?: string;
+  /** Headers the CDN expects, when the resolver supplied any. */
+  httpHeaders?: Record<string, string>;
 }
 
 export interface MediaMetadata {
