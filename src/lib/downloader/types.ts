@@ -64,7 +64,14 @@ export interface ProviderContext {
 }
 
 export interface DownloadStream {
-  body: ReadableStream<Uint8Array>;
+  /** Set when this server streams the bytes itself. */
+  body?: ReadableStream<Uint8Array>;
+  /**
+   * Set instead of `body` when the bytes should come from somewhere else.
+   * Keeps large files off hosts that cap response size or function duration,
+   * which is what Vercel functions do.
+   */
+  redirectUrl?: string;
   contentType: string;
   contentLength?: number;
   filename: string;

@@ -55,6 +55,8 @@ export const facebookReelDownloader: ToolConfig = {
         label: "Short link",
         example: "https://fb.watch/aBcDeFgHiJ/",
         test: /^\/[A-Za-z0-9_-]{5,}\/?$/,
+        // Without this the pattern would also match facebook.com/username.
+        hosts: ["fb.watch", "fb.com"],
       },
       {
         label: "Permalink video",

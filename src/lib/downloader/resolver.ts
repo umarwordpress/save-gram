@@ -20,6 +20,12 @@ export interface MediaResolver {
    * their assets are fetched directly.
    */
   openStream?(input: StreamInput): Promise<UpstreamStream>;
+  /**
+   * A URL the browser can be sent to directly, so the media never passes
+   * through this app. Implemented by resolvers whose backend can serve the
+   * file itself. When present it is preferred over `openStream`.
+   */
+  createDownloadUrl?(input: StreamInput & { filename: string }): Promise<string>;
 }
 
 export interface StreamInput {

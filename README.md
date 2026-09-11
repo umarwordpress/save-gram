@@ -81,36 +81,53 @@ service, and the service consults the registry.
 Reading media out of a social platform is the one part that architecture cannot
 make stable, because none of these platforms publish a download API. That work
 sits behind the `MediaResolver` interface in `src/lib/downloader/resolver.ts`.
-Two implementations ship.
+Three implementations ship, chosen with `SAVEGRAM_RESOLVER`.
 
-**yt-dlp (default).** `YtDlpResolver` runs the `yt-dlp` binary as a subprocess.
-yt-dlp is actively maintained and tracks these platforms as they change, which
-is why it is the default. It needs a real Node server with the binary on PATH
-and **will not work on a serverless platform** such as Vercel functions. Use a
-VPS, a container, Render, Railway or Fly.
+| Value | Implementation | Use when |
+| --- | --- | --- |
+| `remote` | `RemoteYtDlpResolver` | The host cannot run a binary, such as Vercel |
+| `ytdlp` | `YtDlpResolver` | The host allows subprocesses (VPS, container, Railway, Fly) |
+| `http` | `HttpMediaResolver` | You have another service speaking the `ResolverResult` contract |
 
-```bash
-brew install yt-dlp      # macOS
-pipx install yt-dlp      # Linux
+Left unset, an extractor URL wins, then a generic HTTP endpoint, then local
+yt-dlp.
+
+All three share one format mapping, in
+`src/lib/downloader/resolvers/ytdlp-mapping.ts`.
+
+### Deploying on Vercel
+
+Vercel functions cannot run yt-dlp, so extraction goes to the small service in
+[`services/extractor`](services/extractor). Deploy that separately, then point
+the app at it.
+
+```
+Visitor ──> Vercel (site, validation, signing)
+              │  POST /extract          ──> extractor ──> yt-dlp
+              └─ 302 /download?token=…  ──> extractor ──> media ──> visitor
 ```
 
-**HTTP.** `HttpMediaResolver` POSTs `{ platform, url }` to
-`SAVEGRAM_RESOLVER_ENDPOINT` and expects a `ResolverResult` back:
+The media never passes through Vercel, which matters because Vercel functions
+cap response size and duration. The app signs a short lived link and the
+extractor verifies it with the shared secret.
 
-```json
-{
-  "title": "Sunset timelapse",
-  "author": "Test Creator",
-  "thumbnailUrl": "https://scontent.cdninstagram.com/v/thumb.jpg",
-  "durationSeconds": 21,
-  "media": [
-    { "kind": "video", "url": "https://...mp4", "height": 1080, "sizeBytes": 4200000 }
-  ]
-}
+Set on Vercel:
+
+```
+SAVEGRAM_RESOLVER=remote
+SAVEGRAM_EXTRACTOR_URL=https://your-extractor.up.railway.app
+SAVEGRAM_EXTRACTOR_TOKEN=<same as the extractor>
+SAVEGRAM_TOKEN_SECRET=<same as the extractor>
+NEXT_PUBLIC_SITE_URL=https://your-domain
 ```
 
-Select one with `SAVEGRAM_RESOLVER`, or implement `MediaResolver` yourself and
-pass it to `setDefaultResolver()`.
+See [`services/extractor/README.md`](services/extractor/README.md) for the
+service side.
+
+### Deploying anywhere that allows subprocesses
+
+Install yt-dlp on the host and set `SAVEGRAM_RESOLVER=ytdlp`. No second service
+is needed and downloads stream through the app.
 
 ### Platform status
 
@@ -123,8 +140,9 @@ Verified against live public posts:
 | Instagram | **no** | Requires a cookie file, see below |
 
 **Instagram needs a signed in session.** It answers anonymous requests for reel
-media with an empty response, so the tool returns a clear error until
-`SAVEGRAM_YTDLP_COOKIES_INSTAGRAM` points at a Netscape format cookie file.
+media with an empty response, so the tool returns a clear error until a cookie
+file is configured: `YTDLP_COOKIES_INSTAGRAM` on the extraction service, or
+`SAVEGRAM_YTDLP_COOKIES_INSTAGRAM` when running yt-dlp locally.
 Exporting session cookies puts that account at risk of being rate limited or
 disabled, so use a throwaway account rather than a personal one, and never
 commit the file.

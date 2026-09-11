@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { verifyDownloadToken } from "@/lib/downloader/download-token";
 import { downloaderService } from "@/lib/downloader/service";
-import { toDownloaderError } from "@/lib/downloader/errors";
+import { DownloaderError, toDownloaderError } from "@/lib/downloader/errors";
 import { clientKey, pruneRateLimits, rateLimit } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
@@ -54,6 +54,18 @@ export async function GET(request: Request) {
       },
       { signal: request.signal },
     );
+
+    // The resolver is serving the file, so hand the browser straight to it.
+    if (stream.redirectUrl) {
+      return NextResponse.redirect(stream.redirectUrl, {
+        status: 302,
+        headers: { "cache-control": "no-store" },
+      });
+    }
+
+    if (!stream.body) {
+      throw new DownloaderError("upstream_error", undefined, "Download had neither a body nor a redirect");
+    }
 
     const headers = new Headers({
       "content-type": stream.contentType,

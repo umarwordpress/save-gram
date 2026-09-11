@@ -62,7 +62,10 @@ export function validateForTool(input: string, tool: ToolConfig): ValidationResu
     };
   }
 
-  const matched = tool.validation.patterns.find((pattern) => pattern.test.test(normalized.path));
+  const matched = tool.validation.patterns.find(
+    (pattern) =>
+      patternAppliesTo(pattern, normalized.host) && pattern.test.test(normalized.path),
+  );
   if (!matched) {
     return { ok: false, code: "unsupported_path", message: tool.validation.patternHint };
   }
@@ -91,9 +94,18 @@ export function detectTool(input: string | NormalizedUrl): ToolConfig | undefine
   // More than one tool claims the host, so let the path decide.
   return (
     candidates.find((tool) =>
-      tool.validation.patterns.some((pattern) => pattern.test.test(normalized.path)),
+      tool.validation.patterns.some(
+        (pattern) =>
+          patternAppliesTo(pattern, normalized.host) && pattern.test.test(normalized.path),
+      ),
     ) ?? candidates[0]
   );
+}
+
+/** A pattern with no host list applies everywhere the tool accepts. */
+function patternAppliesTo(pattern: { hosts?: string[] }, host: string): boolean {
+  if (!pattern.hosts || pattern.hosts.length === 0) return true;
+  return pattern.hosts.some((base) => hostMatches(host, base));
 }
 
 /**

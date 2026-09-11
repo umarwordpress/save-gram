@@ -17,7 +17,7 @@ export interface ClientTool {
   placeholder: string;
   hostnames: string[];
   patternHint: string;
-  patterns: Array<{ label: string; source: string }>;
+  patterns: Array<{ label: string; source: string; hosts?: string[] }>;
   preserveQueryKeys: string[];
 }
 
@@ -34,6 +34,7 @@ export function toClientTool(tool: ToolConfig): ClientTool {
     patterns: tool.validation.patterns.map((pattern) => ({
       label: pattern.label,
       source: pattern.test.source,
+      hosts: pattern.hosts,
     })),
     preserveQueryKeys: tool.validation.preserveQueryKeys ?? [],
   };
@@ -58,7 +59,12 @@ export function quickValidate(input: string, tool: ClientTool): { ok: boolean; m
   }
 
   const path = url.pathname.length > 1 ? url.pathname.replace(/\/+$/, "") : "/";
-  const pathOk = tool.patterns.some((pattern) => new RegExp(pattern.source).test(path));
+  const pathOk = tool.patterns.some((pattern) => {
+    const hostOkForPattern =
+      !pattern.hosts?.length ||
+      pattern.hosts.some((base) => host === base || host.endsWith(`.${base}`));
+    return hostOkForPattern && new RegExp(pattern.source).test(path);
+  });
   if (!pathOk) return { ok: false, message: tool.patternHint };
 
   return { ok: true };

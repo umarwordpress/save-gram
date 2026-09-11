@@ -45,6 +45,8 @@ export const tiktokVideoDownloader: ToolConfig = {
         label: "Short link",
         example: "https://vm.tiktok.com/ZMabcdefg/",
         test: /^\/[A-Za-z0-9]{5,}\/?$/,
+        // Without this the pattern would also match tiktok.com/explore.
+        hosts: ["vm.tiktok.com", "vt.tiktok.com"],
       },
       {
         label: "Share redirect",

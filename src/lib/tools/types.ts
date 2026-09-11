@@ -45,6 +45,12 @@ export interface UrlPattern {
   example: string;
   /** Tested against the normalized URL path (and query where relevant). */
   test: RegExp;
+  /**
+   * Hosts this pattern applies to, without a leading "www.". Omit to allow any
+   * of the tool's hosts. Needed for short link patterns, which are broad enough
+   * to match an ordinary profile path on the main domain.
+   */
+  hosts?: string[];
 }
 
 export interface ValidationRules {

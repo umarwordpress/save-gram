@@ -119,6 +119,28 @@ export abstract class BaseProvider implements DownloaderProvider {
   }
 
   async download(asset: MediaAsset, ctx?: ProviderContext): Promise<DownloadStream> {
+    // A resolver that can serve the file itself is preferred for every asset,
+    // not just upstream ones, so no media is proxied through this app.
+    const resolver = this.resolver;
+    if (resolver.createDownloadUrl) {
+      const validation = this.validate(asset.sourceUrl);
+      if (!validation.ok) {
+        throw new DownloaderError(
+          "media_rejected",
+          undefined,
+          `Download refused for ${asset.sourceUrl}: ${validation.code}`,
+        );
+      }
+      const redirectUrl = await resolver.createDownloadUrl({
+        platform: this.platform,
+        url: asset.sourceUrl,
+        formatId: asset.formatId,
+        filename: asset.id,
+        signal: ctx?.signal,
+      });
+      return { redirectUrl, contentType: asset.mimeType, filename: asset.id };
+    }
+
     if (asset.streamVia === "upstream") return this.downloadViaResolver(asset, ctx);
     return this.downloadDirect(asset, ctx);
   }
