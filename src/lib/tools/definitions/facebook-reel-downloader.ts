@@ -47,6 +47,11 @@ export const facebookReelDownloader: ToolConfig = {
         test: /^\/watch\/?$/,
       },
       {
+        label: "Share link",
+        example: "https://www.facebook.com/share/r/18bpWhHLja/",
+        test: /^\/share\/(?:r|v|p|reel|video)\/[A-Za-z0-9_-]+\/?$/,
+      },
+      {
         label: "Short link",
         example: "https://fb.watch/aBcDeFgHiJ/",
         test: /^\/[A-Za-z0-9_-]{5,}\/?$/,

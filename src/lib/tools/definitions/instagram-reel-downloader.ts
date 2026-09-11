@@ -54,7 +54,7 @@ export const instagramReelDownloader: ToolConfig = {
       {
         label: "Share link",
         example: "https://www.instagram.com/share/reel/Cx1y2Z3aBcD/",
-        test: /^\/share\/(reels?\/)?[A-Za-z0-9_-]+\/?$/,
+        test: /^\/share\/(?:reels?\/|p\/|v\/)?[A-Za-z0-9_-]+\/?$/,
       },
     ],
     patternHint:
